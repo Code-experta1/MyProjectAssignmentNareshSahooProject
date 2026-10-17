@@ -1,0 +1,78 @@
+name: Deploy Angular UI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Extract project ZIP
+        run: |
+          mkdir app
+          unzip -q crystal-saas-platform.zip -d app
+          find app -name package.json
+
+      - name: Install dependencies
+        run: |
+          PROJECT_DIR=$(dirname "$(find app -name package.json -print -quit)")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          cd "$PROJECT_DIR"
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Build Angular
+        run: |
+          cd "$PROJECT_DIR"
+          npx ng build --base-href=/MyProjectAssignmentNareshSahooProject/
+
+      - name: Locate build output
+        id: output
+        run: |
+          INDEX_FILE=$(find "$PROJECT_DIR/dist" -name index.html -print -quit)
+          if [ -z "$INDEX_FILE" ]; then
+            echo "Angular build did not produce index.html"
+            exit 1
+          fi
+          echo "path=$(dirname "$INDEX_FILE")" >> $GITHUB_OUTPUT
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.output.outputs.path }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
