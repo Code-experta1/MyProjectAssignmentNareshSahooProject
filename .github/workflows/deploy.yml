@@ -28,37 +28,50 @@ jobs:
         with:
           node-version: 20
 
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
       - name: Extract project ZIP
         run: |
-          mkdir app
+          mkdir -p app
           unzip -q crystal-saas-platform.zip -d app
           find app -name package.json
 
       - name: Install dependencies
         run: |
           PROJECT_DIR=$(dirname "$(find app -name package.json -print -quit)")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
-          cd "$PROJECT_DIR"
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
+
+          if [ ! -f "$PROJECT_DIR/package.json" ]; then
+            echo "ERROR: package.json not found"
+            exit 1
           fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          cd "$PROJECT_DIR"
+
+          npm install --legacy-peer-deps
 
       - name: Build Angular
         run: |
           cd "$PROJECT_DIR"
+
           npx ng build --base-href=/MyProjectAssignmentNareshSahooProject/
 
       - name: Locate build output
         id: output
         run: |
           INDEX_FILE=$(find "$PROJECT_DIR/dist" -name index.html -print -quit)
+
           if [ -z "$INDEX_FILE" ]; then
-            echo "Angular build did not produce index.html"
+            echo "ERROR: Angular build did not produce index.html"
+            echo "Checking available build files:"
+            find "$PROJECT_DIR/dist" -maxdepth 4 -type f | head -100
             exit 1
           fi
-          echo "path=$(dirname "$INDEX_FILE")" >> $GITHUB_OUTPUT
+
+          echo "Website output: $(dirname "$INDEX_FILE")"
+          echo "path=$(dirname "$INDEX_FILE")" >> "$GITHUB_OUTPUT"
 
       - name: Upload website
         uses: actions/upload-pages-artifact@v3
@@ -68,6 +81,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
